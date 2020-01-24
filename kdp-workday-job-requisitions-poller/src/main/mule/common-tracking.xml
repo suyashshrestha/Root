@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:anypoint-mq="http://www.mulesoft.org/schema/mule/anypoint-mq"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/anypoint-mq http://www.mulesoft.org/schema/mule/anypoint-mq/current/mule-anypoint-mq.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+		<flow name="enter-trackingFlow" doc:id="ea1e4e29-f162-41ef-83e1-b3642dc7efad" >
+		<ee:transform doc:name="Build messageContext" doc:id="8f38f5da-91de-416f-bc09-6f7b70d12190">
+					<ee:message />
+					<ee:variables>
+				<ee:set-variable resource="dwl/var-enter-messageContext.dwl" variableName="messageContext" />
+					</ee:variables>
+				</ee:transform>
+		<async doc:name="Async" doc:id="c7be1a96-84ef-47c6-955d-d5da3a37468b" >
+			<anypoint-mq:publish doc:name="Publish Tracking Message" doc:id="77a78bc7-07d2-45c4-bdcf-5b8af597d863" config-ref="Anypoint_MQ_KDP" destination="${kdp.anypointTrackingQueue}" outputMimeType="application/json">
+			<anypoint-mq:body><![CDATA[#[vars.messageContext]]]></anypoint-mq:body>
+		</anypoint-mq:publish>
+		</async>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="59155b1f-98ca-4a42-8397-46cdfdc2e53b" >
+				<logger level="ERROR" doc:name="issue with kdp logTrackingQueue" doc:id="abef3a5f-45ac-4552-a2ae-29c6ec601a3e" message="Unable to publish message to logTrackingQueue" />
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<flow name="exit-trackingFlow" doc:id="faaf4e16-490e-4ad2-85c9-ad1746032489" >
+		<ee:transform doc:name="Build messageContext" doc:id="d40ef820-2ec6-446a-9b06-8910c0f0f0b1">
+			<ee:message />
+			<ee:variables>
+				<ee:set-variable resource="dwl/var-exit-messageContext.dwl" variableName="messageContext" />
+			
+</ee:variables>
+		</ee:transform>
+		<anypoint-mq:publish doc:name="Publish Tracking Message" doc:id="322fbe78-7277-4401-864f-d73d419af252" config-ref="Anypoint_MQ_KDP" destination="${kdp.anypointTrackingQueue}" outputMimeType="application/json" >
+			<anypoint-mq:body ><![CDATA[#[vars.messageContext]]]></anypoint-mq:body>
+		</anypoint-mq:publish>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="6d2f47de-bc56-4731-ba47-5468cc2e1626" >
+				<logger level="ERROR" doc:name="issue with kdp logTrackingQueue" doc:id="db1c0103-abe0-4089-9f71-4bb8c4eb63db" message="Unable to publish message to logTrackingQueue" />
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	</mule>

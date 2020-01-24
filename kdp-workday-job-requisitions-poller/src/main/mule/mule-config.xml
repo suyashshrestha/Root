@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:validation="http://www.mulesoft.org/schema/mule/validation" xmlns:anypoint-mq="http://www.mulesoft.org/schema/mule/anypoint-mq"
+	xmlns:workday="http://www.mulesoft.org/schema/mule/workday"
+	xmlns:vm="http://www.mulesoft.org/schema/mule/vm" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:os="http://www.mulesoft.org/schema/mule/os" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.mulesoft.org/schema/mule/workday http://www.mulesoft.org/schema/mule/workday/current/mule-workday.xsd
+http://www.mulesoft.org/schema/mule/anypoint-mq http://www.mulesoft.org/schema/mule/anypoint-mq/current/mule-anypoint-mq.xsd
+http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd">
+	<flow name="main-schedular" doc:id="b696ce17-ea95-4eaa-b601-c71aa4fc1d11" >
+		<scheduler doc:name="Scheduler" doc:id="9189a679-3ac4-4262-aea2-5c094e4b8d62">
+			<scheduling-strategy>
+				<cron expression="${main.scheduler.cron}" />
+			</scheduling-strategy>
+		</scheduler>
+		<flow-ref doc:name="call main flow" doc:id="f8373a88-be71-42e5-857e-b083670c8354" name="main-flow"/>
+	</flow>
+	<flow name="workday-downtime-handling-schedular" doc:id="e5eeb8f5-4831-4b89-9d89-9cd485480018" >
+		<scheduler doc:name="Scheduler" doc:id="c7973ee9-3646-41c7-8936-34a682a28bf4" >
+			<scheduling-strategy >
+				<cron expression="${workdaydowntime.scheduler.cron}" />
+			</scheduling-strategy>
+		</scheduler>
+		<flow-ref doc:name="call main flow" doc:id="82d60989-54a8-4d3f-904c-3e92e22f72d4" name="main-flow"/>
+	</flow>
+	<flow name="main-flow" doc:id="9f0cbba2-6c6f-4c4c-8a06-61e4d8b300da" >
+		<logger level="INFO" doc:name="Poll Start" doc:id="23227db6-e6e7-449a-92ec-cb815eb7b00d" message="Workday Job Requisitions Polling Started"/>
+		<flow-ref doc:name="enter-trackingFlow" doc:id="e795aba8-e5b9-4906-a7e1-1207ef5463e0" name="enter-trackingFlow" />
+		<os:retrieve doc:name="Retrieve lastSuccessfulRun timestamp" doc:id="c0f461b9-7e1b-491e-b97d-56a51c177659" objectStore="JobRequisitions_Object_store" key="#['lastSuccessfulRunTimestamp']" target="updatedFrom">
+			<os:default-value><![CDATA[#[['${objectstore.initialrun}']]]]></os:default-value>
+		</os:retrieve>
+		<flow-ref doc:name="send-request-to-workday-get-jobrequisitions-webservice-operation-firsttime" doc:id="996745cf-0a52-49ff-9e3d-a8975f8f251c" name="send-request-to-workday-get-jobrequisitions-webservice-operation-firsttime-subflow"/>
+		<flow-ref doc:name="fire-messages-to-icims-queue" doc:id="b8657a12-755e-4f6f-84a5-104f46786407" name="fire-messages-to-icims-queue-subflow" />
+		<ee:transform doc:name="set responseResults variable" doc:id="88a49f31-defe-42dc-b93c-e56c80ec77e1" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="responseResults" ><![CDATA[%dw 2.0
+output application/java
+ ns wd urn:com.workday/bsvc
+ ---
+	payload.wd#Get_Job_Requisitions_Response.wd#Response_Results
+                        ]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<ee:transform doc:name="set totalPagesInResponseResults variable" doc:id="d310e26d-9334-440b-8d7d-4fd6f296a242" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="totalPagesInResponseResults" ><![CDATA[%dw 2.0
+output application/java
+ns wd urn:com.workday/bsvc
+---
+payload.wd#Get_Job_Requisitions_Response.wd#Response_Results.Total_Pages	]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<choice doc:name="Choice" doc:id="cfd6fc59-873e-4db0-a1d5-ebb93ad21ec8" >
+			<when expression="#[null != vars.totalPagesInResponseResults and vars.totalPagesInResponseResults &gt; 1]">
+				<ee:transform doc:name="prepare array to loop pagewise" doc:id="de7d0ee1-399c-4d3c-8809-3bdab6d7e350">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+fun preparePagesList(list: Array, maxSize: Number) = if(sizeOf(list) >= maxSize)
+list
+else
+preparePagesList(list ++ [sizeOf(list) + 1 as Number],maxSize)
+---
+preparePagesList([],vars.totalPagesInResponseResults default 0)]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<flow-ref doc:name="get-jobrequisitions-page-wise" doc:id="869106a9-f34f-497e-9091-c0f9a40a33b5" name="get-jobrequisitions-page-wise-subflow" />
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Logger" doc:id="c1f27620-8ba9-4be8-a0ae-8323cac7029e" message="Total pages in workday response is #[vars.totalPagesInResponseResults]"/>
+			</otherwise>
+		</choice>
+		<os:store doc:name="last successful run date" doc:id="64ef40e5-c194-4aec-9321-09544758bc13" key="lastSuccessfulRunTimestamp" objectStore="JobRequisitions_Object_store">
+			<os:value ><![CDATA[#[vars.updatedThrough]]]></os:value>
+		</os:store>
+		<async doc:name="Async" doc:id="ac573cc6-881d-4cbd-b41e-15dbb4ad16f7" >
+			<flow-ref doc:name="exit-trackingFlow" doc:id="f81cd048-bd6f-4fee-bdd5-91c95fdaf4b2" name="exit-trackingFlow" />
+		</async>
+		<logger level="INFO" doc:name="Poll End" doc:id="4587522a-06ab-4771-a1a3-63443d067076" message="Workday Job Requisitions Polling Ended Successfully"/>
+		<error-handler >
+			<on-error-propagate enableNotifications="false" logException="false" doc:name="On Error Propagate" doc:id="8b6bed5b-5e73-4053-b930-31da9f5ed85a" >
+				<logger level="ERROR" doc:name="Poll Error" doc:id="b03447df-bdef-4d7c-b581-630881200be7" message="Workday Job Requisitions Polling Failed"/>
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+	
+	<sub-flow name="get-jobrequisitions-page-wise-subflow" doc:id="2c432287-46bd-407a-9450-4c486f98ce4a">
+	<foreach doc:name="For Each" doc:id="272fce8f-f7df-4092-a06d-e3ef0ce46dc2" collection="#[payload]">
+			<set-variable value="#[payload]" doc:name="set pageNumber" doc:id="21b128d9-2008-4547-b2bb-b2f58135053b" variableName="pageNumber"/>
+			<choice doc:name="Choice" doc:id="a2a938da-fd31-4815-bbae-b4e265d8b0b5" >
+				<when expression="#[vars.pageNumber &gt; 1]">
+				<logger level="INFO" doc:name="Start page level process " doc:id="fed0990f-f3fc-47d1-89c1-c821c6141081" message="Page Number:  #[vars.pageNumber] - Process Started"/>
+		<ee:transform doc:name="prepare workday xml request payload" doc:id="a3ffa285-f2fc-4802-a5db-19d091099a36">
+			<ee:message>
+							<ee:set-payload resource="dwl/requestPayload.dwl" />
+			
+</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="workday request payload" doc:id="51b3beee-518f-42d0-bfa7-bceb636d27a3" message="Request payload :: #[payload]" />
+		<try doc:name="Try" doc:id="515f91f8-c0dd-4660-86f5-719733065c9e">
+
+			<workday:recruiting doc:name="Recruiting" doc:id="30138a8c-1420-4fc3-924c-9dffdf676f86" config-ref="KDP_Workday_Configuration" operation="${workday.operation}"/>
+			<error-handler >
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="0deab23b-cc89-4d88-bf8c-d181967f82ac" >
+					<logger level="ERROR" doc:name="Logger" doc:id="22ca894e-e5f7-41db-a075-7c25240b9e6f" message="Error occured while calling workday for job requisitions in Page Number: #[vars.pageNumber]"/>
+				</on-error-propagate>
+			</error-handler>
+		</try>
+		<flow-ref doc:name="send-messages-to-icims-queue" doc:id="18ce4975-6b1d-4e09-ae6b-70aa5d5a562f" name="fire-messages-to-icims-queue-subflow" />
+					<logger level="INFO" doc:name="Log total pages processed so far" doc:id="1879069a-f284-44af-851e-6b7403e96a48" message="#[vars.pageNumber] / #[vars.totalPagesInResponseResults as Number] Processed" />
+		<logger level="INFO" doc:name="end page level process" doc:id="bdc1ebf8-d626-41cd-b9ec-917666fbf5cd" message="Page Number:  #[vars.pageNumber] - Process Ended"/>
+	
+				</when>
+			</choice>
+		</foreach>
+	 </sub-flow>
+	<sub-flow name="send-request-to-workday-get-jobrequisitions-webservice-operation-firsttime-subflow" doc:id="288f0972-ac6a-4302-8146-71c03f0d37d9" >
+		<set-variable value="#[vars.updatedFrom]" doc:name="updatedFrom" doc:id="50a558ce-8fe2-4a1e-8c93-695ce66b16c7" variableName="updatedFrom"/>
+		<set-variable value="#[now() &gt;&gt; 'GMT-06' as String{format: &quot;yyyy-mm-dd'T'hh:mm:ss&quot;}]" doc:name="updatedThrough" doc:id="ae719995-2240-4dbd-8ff7-d5c22cd93e73" variableName="updatedThrough"/>
+		<set-variable value="#[1]" doc:name="pageNumber" doc:id="9b660af3-d9c0-4ff3-84cb-f1a4a3538c17" variableName="pageNumber"/>
+		<set-variable value="${workday.response.jobreqs.count.per.page}" doc:name="pageSize" doc:id="0dde4ab8-f799-4bb5-8ba3-4a02ed1d11c2" variableName="pageSize"/>
+		<ee:transform doc:name="prepare workday xml request payload" doc:id="8010b15a-2462-4937-b5aa-a1d1c5802af3" >
+			<ee:message >
+				<ee:set-payload resource="dwl/requestPayload.dwl" />
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="workday request payload" doc:id="a1ad8f51-a1b2-4758-88a7-564c486d80a9" message="Request payload :: #[payload]"/>
+		<try doc:name="Try" doc:id="2b253c95-3230-4ef4-9832-48fa62325845" >
+			<workday:recruiting doc:name="Recruiting" doc:id="e7af9058-b3b4-425c-b0e3-8c18ea5f4a28" config-ref="KDP_Workday_Configuration" operation="${workday.operation}"/>
+			<error-handler >
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="34e8c054-04a5-4a15-822a-604585965ab3" >
+					<logger level="ERROR" doc:name="error while making first request to workday get_job_requisitions web service operation" doc:id="ac9c02ad-bf57-41a0-9776-8c8336d2b02e" message="Error occured while calling workday job requisitions operation first time" />
+				</on-error-propagate>
+			</error-handler>
+		</try>
+		
+	</sub-flow>
+	<sub-flow name="fire-messages-to-icims-queue-subflow" doc:id="9ac247b4-7748-48f1-883f-b00f39d4c1ea" >
+		<logger level="INFO" doc:name="data feed to icims start" doc:id="6e90be8c-6564-4fbb-b684-f82ca04776b2" message="Data feed to icims  queue Started" />
+		<try doc:name="Try" doc:id="bf1840fc-c6cb-4385-a316-e00c2654ffbb" >
+			<anypoint-mq:publish doc:name="Publish" doc:id="7efe3039-5adf-47b4-be2a-49513ff3d175" config-ref="Anypoint_MQ_Default_Subscriber" destination="${anypointmq.queuename}" />
+			<error-handler >
+				<on-error-propagate enableNotifications="false" logException="false" doc:name="On Error Propagate" doc:id="289b57e3-ad41-4217-a136-6ff71e6e7586" >
+					<logger level="ERROR" doc:name="error while sending messages to icims queue" doc:id="cbed4f6a-ac92-448f-8a63-96f6c9fc68c3" message="Error while sending messages to icims queue"/>
+				</on-error-propagate>
+			</error-handler>
+		</try>
+		<logger level="INFO" doc:name="data feed to icims end" doc:id="a9c62505-bf2f-4257-90d5-1e0079bef7e4" message="Data feed to icims queue completed sucessfully" />
+	</sub-flow>
+</mule>

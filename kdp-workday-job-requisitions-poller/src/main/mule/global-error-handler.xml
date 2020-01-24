@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:anypoint-mq="http://www.mulesoft.org/schema/mule/anypoint-mq"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/anypoint-mq http://www.mulesoft.org/schema/mule/anypoint-mq/current/mule-anypoint-mq.xsd">
+	
+	<flow name="error-trackingFlow" doc:id="ccc14a33-452e-40a5-b8b6-61596d5c3835" >
+		<ee:transform doc:name="Build exceptionContext" doc:id="b21b51c1-60de-4394-899c-765a551ae874">
+				<ee:message>
+				</ee:message>
+				<ee:variables>
+				<ee:set-variable resource="dwl/var-exceptionContext.dwl" variableName="exceptionContext" />
+				
+</ee:variables>
+			</ee:transform>
+		<anypoint-mq:publish doc:name="Publish Exception Message" doc:id="3a094381-00bb-43db-9182-f6382b295379" config-ref="Anypoint_MQ_KDP" destination="${kdp.anypointExceptionQueue}" outputMimeType="application/json">
+			<anypoint-mq:body><![CDATA[#[vars.exceptionContext]]]></anypoint-mq:body>
+		</anypoint-mq:publish>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="3fd25087-0637-4078-a63a-2b4487a8f87f" >
+				<logger level="ERROR" doc:name="issue with kdp logExceptionQueue" doc:id="1fff2c05-7366-475f-a980-8d153e58f811" message="Unable to publish error message to logExceptionQueue" />
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<error-handler name="allErrorHandler" doc:id="2ba67d7e-a350-4738-b120-b7ee56cefbc3" >
+		<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="9b8cba6e-c15b-4c5c-b087-33506ec94695" >
+			 <logger level="ERROR" doc:name="global exception message" doc:id="a2766dc9-1a05-4ecc-a5a5-f2092ad4e10e" message="Exception catched by global error handler and same published to logExceptionQueue" />
+			<async doc:name="Async" doc:id="22fc8c56-3e03-4bd7-8588-f6950a8a6c97" >
+				<flow-ref doc:name="trigger error-tracking-flow" doc:id="d383d99c-cfff-4d84-b10d-b030b33e5f29" name="error-trackingFlow" />
+			</async>
+		</on-error-continue>
+	</error-handler>
+	
+	</mule>

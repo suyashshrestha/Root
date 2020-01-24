@@ -1,0 +1,1 @@
+kdp workday job requisitions poller sends web service request to workday for job requistions data (for changes only data)

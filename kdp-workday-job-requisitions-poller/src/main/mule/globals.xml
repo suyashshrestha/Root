@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties" xmlns:anypoint-mq="http://www.mulesoft.org/schema/mule/anypoint-mq"
+	xmlns:workday="http://www.mulesoft.org/schema/mule/workday"
+	xmlns:vm="http://www.mulesoft.org/schema/mule/vm" xmlns:os="http://www.mulesoft.org/schema/mule/os" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.mulesoft.org/schema/mule/workday http://www.mulesoft.org/schema/mule/workday/current/mule-workday.xsd
+http://www.mulesoft.org/schema/mule/anypoint-mq http://www.mulesoft.org/schema/mule/anypoint-mq/current/mule-anypoint-mq.xsd
+http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd">
+	<configuration-properties doc:name="Configuration properties" doc:id="9a89e1da-cf24-46fb-8f2e-765f7d284311" file="${mule.env}.properties" />
+	<os:object-store name="JobRequisitions_Object_store" doc:name="Object store" doc:id="06cf1abf-ff11-45b0-b08e-724b864e6486" maxEntries="1" />
+	<workday:config-version-32-config name="KDP_Workday_Configuration" doc:name="Workday Config version 32" doc:id="9ec527df-883d-4eff-b87f-a4bce311863e" >
+		<workday:basic-authentication-api-v32-connection userName="${secure::workday.username}" password="${secure::workday.password}" tenantName="${workday.tenant}" hostName="${workday.host}" >
+			<reconnection >
+				<reconnect frequency="${workday.reconnection.frequency}" count="${workday.reconnection.attempts}" />
+			</reconnection>
+		</workday:basic-authentication-api-v32-connection>
+	</workday:config-version-32-config>
+	<anypoint-mq:default-subscriber-config name="Anypoint_MQ_Default_Subscriber" doc:name="Anypoint MQ Default subscriber" doc:id="ccfde472-88bb-43a4-a218-a7ed39fb8967" >
+		<anypoint-mq:connection url="${anypointmq.url}" clientId="${anypointmq.clientAppId}" clientSecret="${anypointmq.clientSecret}" />
+	</anypoint-mq:default-subscriber-config>
+	<secure-properties:config name="Secure_Properties_Config" doc:name="Secure Properties Config" doc:id="94308483-bf26-466f-93cb-a85647886223" file="${mule.env}.properties" key="${encryption.key}" >
+		<secure-properties:encrypt algorithm="Blowfish" />
+	</secure-properties:config>
+	<anypoint-mq:default-subscriber-config name="Anypoint_MQ_KDP" doc:name="Anypoint MQ Default subscriber" doc:id="017e4354-c93c-4d8e-adde-f840026d8194" acknowledgementMode="IMMEDIATE" pollingTime="${kdp.anypointmq.pollingtime}" fetchSize="${kdp.anypointmq.prefetch.size}">
+		<anypoint-mq:connection url="${kdp.anypointmq.url}" clientId="${kdp.anypointmq.clientAppId}" clientSecret="${kdp.anypointmq.clientSecret}"/>
+	</anypoint-mq:default-subscriber-config>
+	<configuration doc:name="Configuration" doc:id="c398c9a4-bffa-4bd2-88bf-e971511211e2" defaultErrorHandler-ref="allErrorHandler" />
+</mule>
